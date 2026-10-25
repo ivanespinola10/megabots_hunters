@@ -1,0 +1,23 @@
+[
+  {
+    "id": "z1",
+    "nombreBioma": "Páramo del Núcleo Caído",
+    "descripcion": "Un desierto rojo donde yacen los restos del Primer Núcleo. Nivel de Infección: Crítico. Los Raptor-Bots cazan en manadas buscando piezas.",
+    "fondoVisual": "0xFF8B0000",
+    "enemigosIds": ["e_rust_raptor"]
+  },
+  {
+    "id": "z2",
+    "nombreBioma": "Ciudad de Neón Muerta",
+    "descripcion": "Infraestructura abandonada por la humanidad. Nivel de Infección: Alto. Los Ciempiés de Neón usan las líneas de tensión para emboscar.",
+    "fondoVisual": "0xFF191970",
+    "enemigosIds": ["e_neon_centipede"]
+  },
+  {
+    "id": "z3",
+    "nombreBioma": "Fábrica de Motores Infectada",
+    "descripcion": "Antigua planta de ensamblaje controlada por el Virus. Aquí el Gólem defiende las reservas de partes pesadas.",
+    "fondoVisual": "0xFF2F4F4F",
+    "enemigosIds": ["e_scrap_golem", "e_rust_raptor"]
+  }
+]

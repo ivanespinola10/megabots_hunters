@@ -1,0 +1,26 @@
+[
+  {
+    "id": "e_neon_centipede",
+    "nombre": "Ciempiés de Neón",
+    "cabeza": { "nombre": "Núcleo Corrupto de Neón", "hpMaximo": 80, "bonusAtaque": 0, "bonusVelocidad": 0 },
+    "brazoIzquierdo": { "nombre": "Mandíbula Eléctrica", "hpMaximo": 40, "bonusAtaque": 12, "bonusVelocidad": 0 },
+    "brazoDerecho": { "nombre": "Mandíbula Eléctrica", "hpMaximo": 40, "bonusAtaque": 12, "bonusVelocidad": 0 },
+    "piernas": { "nombre": "Sectores Articulados", "hpMaximo": 50, "bonusAtaque": 0, "bonusVelocidad": 8 }
+  },
+  {
+    "id": "e_rust_raptor",
+    "nombre": "Raptor-Bot de Óxido",
+    "cabeza": { "nombre": "Núcleo Primordial", "hpMaximo": 60, "bonusAtaque": 0, "bonusVelocidad": 0 },
+    "brazoIzquierdo": { "nombre": "Garra Oxidada", "hpMaximo": 30, "bonusAtaque": 15, "bonusVelocidad": 0 },
+    "brazoDerecho": { "nombre": "Cañón Roto", "hpMaximo": 20, "bonusAtaque": 5, "bonusVelocidad": 0 },
+    "piernas": { "nombre": "Patas Biónicas Raptor", "hpMaximo": 40, "bonusAtaque": 0, "bonusVelocidad": 10 }
+  },
+  {
+    "id": "e_scrap_golem",
+    "nombre": "Gólem de Chatarra Corrupta",
+    "cabeza": { "nombre": "CPU Infectada por Virus", "hpMaximo": 150, "bonusAtaque": 0, "bonusVelocidad": 0 },
+    "brazoIzquierdo": { "nombre": "Puño Demoledor", "hpMaximo": 80, "bonusAtaque": 20, "bonusVelocidad": 0 },
+    "brazoDerecho": { "nombre": "Escudo de Chasis", "hpMaximo": 120, "bonusAtaque": 0, "bonusVelocidad": 0 },
+    "piernas": { "nombre": "Orugas Pesadas", "hpMaximo": 100, "bonusAtaque": 0, "bonusVelocidad": 1 }
+  }
+]
