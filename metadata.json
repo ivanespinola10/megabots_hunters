@@ -1,0 +1,8 @@
+{
+  "name": "Megabots Hunters",
+  "description": "Cybernetic mecha combat RPG with modular robot customization, tactical turn-based targeting, salvaging, and biome exploration.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

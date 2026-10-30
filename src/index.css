@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Share Tech Mono', monospace, sans-serif;
+    background-color: #0d0d0d;
+    color: #ffffff;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-orbitron {
+    font-family: 'Orbitron', sans-serif;
+  }
+}
+
+/* Custom Cyberpunk & Terminal Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111111;
+}
+::-webkit-scrollbar-thumb {
+  background: #f59e0b;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d97706;
+}
+
+/* CRT Screen Scanline effect */
+.scanlines {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.03),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.03)
+  );
+  background-size: 100% 3px, 6px 100%;
+  pointer-events: none;
+}
+
+@keyframes shake-anim {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-8px, 0); }
+  40% { transform: translate(8px, 0); }
+  60% { transform: translate(-6px, 0); }
+  80% { transform: translate(6px, 0); }
+  100% { transform: translate(0, 0); }
+}
+
+.shake {
+  animation: shake-anim 0.3s cubic-bezier(.36,.07,.19,.97) both;
+}
