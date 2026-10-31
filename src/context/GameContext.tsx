@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { RobotData, ItemData, WorldZone, cloneRobot, getBaseAtaque, getBaseVelocidad, getEnergiaMax, getXpRequerida, ModuloData } from '../types/game';
-import { DEFAULT_ENEMIES, DEFAULT_ZONES } from '../data/defaultData';
+import { RobotData, ItemData, WorldZone, PilotData, cloneRobot, getBaseAtaque, getBaseVelocidad, getEnergiaMax, getXpRequerida, ModuloData } from '../types/game';
+import { DEFAULT_ENEMIES, DEFAULT_ZONES, DEFAULT_PILOTS, TITAN_ELITE_CHASSIS } from '../data/defaultData';
 import { audioService } from '../services/audioService';
 
 interface GameContextType {
@@ -10,10 +10,17 @@ interface GameContextType {
   mercadoNegroDisponible: boolean;
   zonasDisponibles: WorldZone[];
   enemigosDisponibles: RobotData[];
+  pilotoActual: PilotData;
+  pilotosDisponibles: PilotData[];
   isLoadingData: boolean;
   isMuted: boolean;
+  licenciaElite: boolean;
+  arenaRacha: number;
+  puedeReclamarDiaria: boolean;
   toggleMute: () => void;
   seleccionarChasisInicial: (seleccion: RobotData) => void;
+  seleccionarPiloto: (piloto: PilotData) => void;
+  actualizarPerfilPiloto: (nombre: string, callsign: string) => void;
   curarRobotCompleto: () => void;
   agregarLoot: (items: ItemData[]) => void;
   equiparDesdeInventario: (item: ItemData) => void;
@@ -22,6 +29,11 @@ interface GameContextType {
   rollMercadoNegro: () => void;
   desactivarMercadoNegro: () => void;
   ganarXpYGuardar: (cantidad: number) => boolean;
+  comprarLicenciaElite: () => void;
+  desbloquearPorMaestria: () => void;
+  actualizarArenaRacha: (racha: number) => void;
+  reclamarRecompensaDiaria: () => boolean;
+  triggerHaptic: (tipo: 'light' | 'medium' | 'heavy' | 'success') => void;
   exportSave: () => string;
   importSave: (base64Save: string) => boolean;
   hardReset: () => void;
@@ -36,21 +48,46 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [inventario, setInventario] = useState<ItemData[]>([]);
   const [creditos, setCreditos] = useState<number>(0);
   const [mercadoNegroDisponible, setMercadoNegroDisponible] = useState<boolean>(false);
-  const [zonasDisponibles, setZonasDisponibles] = useState<WorldZone[]>(DEFAULT_ZONES);
-  const [enemigosDisponibles, setEnemigosDisponibles] = useState<RobotData[]>(DEFAULT_ENEMIES);
+  const [zonasDisponibles] = useState<WorldZone[]>(DEFAULT_ZONES);
+  const [enemigosDisponibles] = useState<RobotData[]>(DEFAULT_ENEMIES);
   const [isLoadingData, setIsLoadingData] = useState<boolean>(true);
   const [isMuted, setIsMuted] = useState<boolean>(audioService.getMuted());
+  const [licenciaElite, setLicenciaElite] = useState<boolean>(false);
+  const [arenaRacha, setArenaRacha] = useState<number>(0);
+  const [ultimaRecompensaDiaria, setUltimaRecompensaDiaria] = useState<string>('');
+  const [pilotoActual, setPilotoActual] = useState<PilotData>(DEFAULT_PILOTS[0]);
+  const [pilotosDisponibles] = useState<PilotData[]>(DEFAULT_PILOTS);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const puedeReclamarDiaria = ultimaRecompensaDiaria !== todayStr;
 
   const toggleMute = () => {
     const updated = audioService.toggleMute();
     setIsMuted(updated);
   };
 
+  const triggerHaptic = (tipo: 'light' | 'medium' | 'heavy' | 'success') => {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try {
+        if (tipo === 'light') navigator.vibrate(15);
+        else if (tipo === 'medium') navigator.vibrate(35);
+        else if (tipo === 'heavy') navigator.vibrate([40, 30, 40]);
+        else if (tipo === 'success') navigator.vibrate([30, 50, 60]);
+      } catch {
+        // Ignore haptics restriction
+      }
+    }
+  };
+
   const saveToStorage = useCallback((
     curCreditos: number,
     curInventario: ItemData[],
     curRobot: RobotData | null,
-    curMercadoNegro: boolean
+    curMercadoNegro: boolean,
+    curLicencia: boolean,
+    curArenaRacha: number,
+    curRecompensaDiaria: string,
+    curPiloto?: PilotData
   ) => {
     try {
       const saveData = {
@@ -58,14 +95,33 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         inventario: curInventario,
         robotPrincipal: curRobot,
         mercadoNegroDisponible: curMercadoNegro,
+        licenciaElite: curLicencia,
+        arenaRacha: curArenaRacha,
+        ultimaRecompensaDiaria: curRecompensaDiaria,
+        pilotoActual: curPiloto || pilotoActual,
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
     } catch (e) {
       console.error('Error saving game data', e);
     }
-  }, []);
+  }, [pilotoActual]);
 
-  // Heals non-destroyed modules to 100% HP
+  const seleccionarPiloto = useCallback((nuevoPiloto: PilotData) => {
+    setPilotoActual(nuevoPiloto);
+    audioService.playSfx('equip');
+    triggerHaptic('medium');
+    saveToStorage(creditos, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria, nuevoPiloto);
+  }, [creditos, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria, saveToStorage]);
+
+  const actualizarPerfilPiloto = useCallback((nombre: string, callsign: string) => {
+    setPilotoActual((prev) => {
+      const updated: PilotData = { ...prev, nombre, callsign };
+      saveToStorage(creditos, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria, updated);
+      return updated;
+    });
+    audioService.playSfx('click');
+  }, [creditos, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria, saveToStorage]);
+
   const curarRobotCompleto = useCallback(() => {
     setRobotPrincipal((prev) => {
       if (!prev) return null;
@@ -77,12 +133,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         piernas: prev.piernas.estado !== 'destruido' ? { ...prev.piernas, hpActual: prev.piernas.hpMaximo } : { ...prev.piernas },
         energiaActual: prev.energiaMax ?? getEnergiaMax(prev.nivel || 1),
       };
-      saveToStorage(creditos, inventario, healed, mercadoNegroDisponible);
+      saveToStorage(creditos, inventario, healed, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
       return healed;
     });
-  }, [creditos, inventario, mercadoNegroDisponible, saveToStorage]);
+  }, [creditos, inventario, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria, saveToStorage]);
 
-  // Initial load
   useEffect(() => {
     const init = async () => {
       try {
@@ -91,10 +146,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const parsed = JSON.parse(savedString);
           if (parsed.creditos !== undefined) setCreditos(parsed.creditos);
           if (parsed.mercadoNegroDisponible !== undefined) setMercadoNegroDisponible(parsed.mercadoNegroDisponible);
+          if (parsed.licenciaElite !== undefined) setLicenciaElite(parsed.licenciaElite);
+          if (parsed.arenaRacha !== undefined) setArenaRacha(parsed.arenaRacha);
+          if (parsed.ultimaRecompensaDiaria !== undefined) setUltimaRecompensaDiaria(parsed.ultimaRecompensaDiaria);
+          if (parsed.pilotoActual) setPilotoActual(parsed.pilotoActual);
           if (Array.isArray(parsed.inventario)) setInventario(parsed.inventario);
           if (parsed.robotPrincipal) {
             const loadedRobot = cloneRobot(parsed.robotPrincipal);
-            // Auto-heal non-destroyed parts on load, matching original Flutter behavior
             if (loadedRobot.cabeza.estado !== 'destruido') loadedRobot.cabeza.hpActual = loadedRobot.cabeza.hpMaximo;
             if (loadedRobot.brazoIzquierdo.estado !== 'destruido') loadedRobot.brazoIzquierdo.hpActual = loadedRobot.brazoIzquierdo.hpMaximo;
             if (loadedRobot.brazoDerecho.estado !== 'destruido') loadedRobot.brazoDerecho.hpActual = loadedRobot.brazoDerecho.hpMaximo;
@@ -116,13 +174,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const seleccionarChasisInicial = (seleccion: RobotData) => {
     const clone = cloneRobot(seleccion);
     setRobotPrincipal(clone);
-    saveToStorage(creditos, inventario, clone, mercadoNegroDisponible);
+    saveToStorage(creditos, inventario, clone, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
   };
 
   const agregarLoot = (items: ItemData[]) => {
     setInventario((prev) => {
       const next = [...prev, ...items];
-      saveToStorage(creditos, next, robotPrincipal, mercadoNegroDisponible);
+      saveToStorage(creditos, next, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
       return next;
     });
   };
@@ -141,13 +199,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setRobotPrincipal(nextRobot);
     setInventario(nextInventario);
     audioService.playSfx('equip');
-    saveToStorage(creditos, nextInventario, nextRobot, mercadoNegroDisponible);
+    triggerHaptic('medium');
+    saveToStorage(creditos, nextInventario, nextRobot, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
   };
 
   const agregarCreditos = (cantidad: number) => {
     setCreditos((prev) => {
       const next = prev + cantidad;
-      saveToStorage(next, inventario, robotPrincipal, mercadoNegroDisponible);
+      saveToStorage(next, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
       return next;
     });
   };
@@ -156,7 +215,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (creditos >= cantidad) {
       const next = creditos - cantidad;
       setCreditos(next);
-      saveToStorage(next, inventario, robotPrincipal, mercadoNegroDisponible);
+      saveToStorage(next, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
       return true;
     }
     return false;
@@ -164,14 +223,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const desactivarMercadoNegro = () => {
     setMercadoNegroDisponible(false);
-    saveToStorage(creditos, inventario, robotPrincipal, false);
+    saveToStorage(creditos, inventario, robotPrincipal, false, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
   };
 
   const rollMercadoNegro = () => {
     if (!mercadoNegroDisponible) {
-      if (Math.random() < 0.20) {
+      if (Math.random() < 0.20 || licenciaElite) {
         setMercadoNegroDisponible(true);
-        saveToStorage(creditos, inventario, robotPrincipal, true);
+        saveToStorage(creditos, inventario, robotPrincipal, true, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
       }
     }
   };
@@ -203,11 +262,66 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     setRobotPrincipal(nextRobot);
-    saveToStorage(creditos, inventario, nextRobot, mercadoNegroDisponible);
+    saveToStorage(creditos, inventario, nextRobot, mercadoNegroDisponible, licenciaElite, arenaRacha, ultimaRecompensaDiaria);
     if (subioNivel) {
       audioService.playSfx('levelup');
+      triggerHaptic('success');
     }
     return subioNivel;
+  };
+
+  const comprarLicenciaElite = () => {
+    setLicenciaElite(true);
+    setCreditos((prev) => {
+      const next = prev + 250;
+      // Add legendary Titan parts into inventory
+      const titanItems: ItemData[] = [
+        {
+          id: `item_titan_head_${Date.now()}`,
+          nombre: `Módulo Élite: ${TITAN_ELITE_CHASSIS.cabeza.nombre}`,
+          tipo: 'moduloDirecto',
+          moduloAsociado: TITAN_ELITE_CHASSIS.cabeza,
+        },
+        {
+          id: `item_titan_arm_${Date.now()}`,
+          nombre: `Módulo Élite: ${TITAN_ELITE_CHASSIS.brazoIzquierdo.nombre}`,
+          tipo: 'moduloDirecto',
+          moduloAsociado: TITAN_ELITE_CHASSIS.brazoIzquierdo,
+        },
+      ];
+      const nextInv = [...inventario, ...titanItems];
+      setInventario(nextInv);
+      saveToStorage(next, nextInv, robotPrincipal, true, true, arenaRacha, ultimaRecompensaDiaria);
+      return next;
+    });
+    audioService.playSfx('victory');
+    triggerHaptic('success');
+  };
+
+  const desbloquearPorMaestria = () => {
+    setLicenciaElite(true);
+    saveToStorage(creditos, inventario, robotPrincipal, mercadoNegroDisponible, true, arenaRacha, ultimaRecompensaDiaria);
+    audioService.playSfx('victory');
+    triggerHaptic('success');
+  };
+
+  const actualizarArenaRacha = (racha: number) => {
+    if (racha > arenaRacha) {
+      setArenaRacha(racha);
+      saveToStorage(creditos, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, racha, ultimaRecompensaDiaria);
+    }
+  };
+
+  const reclamarRecompensaDiaria = (): boolean => {
+    if (!puedeReclamarDiaria) return false;
+    const bonus = 75;
+    const nextCreds = creditos + bonus;
+    setCreditos(nextCreds);
+    setUltimaRecompensaDiaria(todayStr);
+    saveToStorage(nextCreds, inventario, robotPrincipal, mercadoNegroDisponible, licenciaElite, arenaRacha, todayStr);
+    audioService.playSfx('heal');
+    triggerHaptic('light');
+    return true;
   };
 
   const exportSave = (): string => {
@@ -216,6 +330,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       inventario,
       robotPrincipal,
       mercadoNegroDisponible,
+      licenciaElite,
+      arenaRacha,
+      ultimaRecompensaDiaria,
     };
     const jsonStr = JSON.stringify(saveData);
     return btoa(unescape(encodeURIComponent(jsonStr)));
@@ -228,8 +345,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const nextCreditos = parsed.creditos ?? 0;
       const nextMercado = parsed.mercadoNegroDisponible ?? false;
+      const nextLicencia = parsed.licenciaElite ?? false;
+      const nextArenaRacha = parsed.arenaRacha ?? 0;
+      const nextDiaria = parsed.ultimaRecompensaDiaria ?? '';
       const nextInventario: ItemData[] = Array.isArray(parsed.inventario) ? parsed.inventario : [];
       let nextRobot: RobotData | null = null;
+      let nextPiloto: PilotData = DEFAULT_PILOTS[0];
+
+      if (parsed.pilotoActual) {
+        nextPiloto = parsed.pilotoActual;
+      }
 
       if (parsed.robotPrincipal) {
         nextRobot = cloneRobot(parsed.robotPrincipal);
@@ -242,9 +367,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       setCreditos(nextCreditos);
       setMercadoNegroDisponible(nextMercado);
+      setLicenciaElite(nextLicencia);
+      setArenaRacha(nextArenaRacha);
+      setUltimaRecompensaDiaria(nextDiaria);
       setInventario(nextInventario);
       setRobotPrincipal(nextRobot);
-      saveToStorage(nextCreditos, nextInventario, nextRobot, nextMercado);
+      setPilotoActual(nextPiloto);
+      saveToStorage(nextCreditos, nextInventario, nextRobot, nextMercado, nextLicencia, nextArenaRacha, nextDiaria, nextPiloto);
       return true;
     } catch (e) {
       console.error('Failed to import save code:', e);
@@ -258,6 +387,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setInventario([]);
     setRobotPrincipal(null);
     setMercadoNegroDisponible(false);
+    setLicenciaElite(false);
+    setArenaRacha(0);
+    setUltimaRecompensaDiaria('');
+    setPilotoActual(DEFAULT_PILOTS[0]);
   };
 
   return (
@@ -269,10 +402,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         mercadoNegroDisponible,
         zonasDisponibles,
         enemigosDisponibles,
+        pilotoActual,
+        pilotosDisponibles,
         isLoadingData,
         isMuted,
+        licenciaElite,
+        arenaRacha,
+        puedeReclamarDiaria,
         toggleMute,
         seleccionarChasisInicial,
+        seleccionarPiloto,
+        actualizarPerfilPiloto,
         curarRobotCompleto,
         agregarLoot,
         equiparDesdeInventario,
@@ -281,6 +421,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         rollMercadoNegro,
         desactivarMercadoNegro,
         ganarXpYGuardar,
+        comprarLicenciaElite,
+        desbloquearPorMaestria,
+        actualizarArenaRacha,
+        reclamarRecompensaDiaria,
+        triggerHaptic,
         exportSave,
         importSave,
         hardReset,

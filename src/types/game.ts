@@ -48,6 +48,20 @@ export interface WorldZone {
   descripcion: string;
   fondoVisual: string;
   enemigosIds: string[];
+  requiereLicencia?: boolean;
+  esArena?: boolean;
+}
+
+export interface PilotData {
+  id: string;
+  nombre: string;
+  callsign: string;
+  rango: string;
+  avatar: string;
+  biografia: string;
+  habilidadPiloto: string;
+  fraseVictoria: string;
+  colorTema: string;
 }
 
 export interface BattleEvent {
@@ -56,8 +70,6 @@ export interface BattleEvent {
   objetivoEsJugador: boolean;
   moduloAfectado: TipoModulo;
 }
-
-// Helpers for robot calculations matching Robot and Modulo classes in Flutter
 
 export function createModulo(data: ModuloData): ModuloData {
   return {
@@ -104,7 +116,7 @@ export function getHpTotal(r: RobotData): number {
   let total = getModulos(r).reduce((sum, m) => sum + m.hpMaximo, 0);
   const marcas = getMarcasConteo(r);
   if ((marcas['titanio'] || 0) >= 3) {
-    total = Math.floor(total * 1.2); // +20% HP Max
+    total = Math.floor(total * 1.2);
   }
   return total;
 }
@@ -131,7 +143,7 @@ export function getAtaqueTotal(r: RobotData): number {
   if (r.brazoIzquierdo.estado !== 'destruido') ataque += r.brazoIzquierdo.bonusAtaque || 0;
   if (r.brazoDerecho.estado !== 'destruido') ataque += r.brazoDerecho.bonusAtaque || 0;
   const marcas = getMarcasConteo(r);
-  if ((marcas['oxido'] || 0) >= 3) ataque += 15; // +15 Ataque Fijo
+  if ((marcas['oxido'] || 0) >= 3) ataque += 15;
   return ataque;
 }
 
@@ -140,7 +152,7 @@ export function getVelocidadTotal(r: RobotData): number {
   let velocidad = r.baseVelocidad ?? getBaseVelocidad(nivel);
   if (r.piernas.estado !== 'destruido') velocidad += r.piernas.bonusVelocidad || 0;
   const marcas = getMarcasConteo(r);
-  if ((marcas['neon'] || 0) >= 3) velocidad += 10; // +10 Velocidad Fija
+  if ((marcas['neon'] || 0) >= 3) velocidad += 10;
   return velocidad;
 }
 

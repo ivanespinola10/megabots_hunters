@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGame } from '../context/GameContext';
 import {
   getAtaqueTotal,
@@ -7,10 +7,15 @@ import {
   ModuloData,
   getMarcasConteo,
 } from '../types/game';
-import { Wrench, Shield, Zap, Sparkles, Flame, Snowflake, Skull } from 'lucide-react';
+import { getRobotPortrait } from '../assets/gameAssets';
+import { ShareBuildModal } from './ShareBuildModal';
+import { EliteLicenseModal } from './EliteLicenseModal';
+import { Wrench, Shield, Zap, Sparkles, Flame, Snowflake, Skull, Share2, Award } from 'lucide-react';
 
 export const WorkshopPanel: React.FC = () => {
-  const { robotPrincipal, inventario, equiparDesdeInventario } = useGame();
+  const { robotPrincipal, inventario, equiparDesdeInventario, licenciaElite } = useGame();
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
 
   if (!robotPrincipal) {
     return (
@@ -27,6 +32,7 @@ export const WorkshopPanel: React.FC = () => {
   const atkTotal = getAtaqueTotal(robotPrincipal);
   const velTotal = getVelocidadTotal(robotPrincipal);
   const marcas = getMarcasConteo(robotPrincipal);
+  const robotImg = getRobotPortrait(robotPrincipal.id);
 
   const renderModuleCard = (label: string, modulo: ModuloData) => {
     const isDestroyed = modulo.estado === 'destruido';
@@ -51,7 +57,6 @@ export const WorkshopPanel: React.FC = () => {
           </span>
         </div>
 
-        {/* Badges for stats, passives, element, brand */}
         <div className="mt-1.5 flex flex-wrap gap-1 text-[10px]">
           {modulo.bonusAtaque ? (
             <span className="rounded bg-red-950/60 border border-red-500/40 px-1.5 py-0.5 text-red-300">
@@ -94,7 +99,21 @@ export const WorkshopPanel: React.FC = () => {
         <div>
           <div className="flex items-center justify-between mb-3 border-b border-white/10 pb-2">
             <div>
-              <span className="text-[10px] uppercase tracking-widest text-white/50">ROBOT ACTIVO</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-widest text-white/50">ROBOT ACTIVO</span>
+                {licenciaElite ? (
+                  <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-1.5 py-0.5 rounded font-mono font-bold">
+                    ÉLITE
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setLicenseModalOpen(true)}
+                    className="text-[9px] bg-white/10 text-white/70 hover:text-amber-400 hover:border-amber-400 border border-white/20 px-1.5 py-0.5 rounded font-mono transition cursor-pointer"
+                  >
+                    + MEJORAR A ÉLITE
+                  </button>
+                )}
+              </div>
               <h2 className="font-orbitron text-lg md:text-xl font-bold text-cyan-400 tracking-wide">
                 {robotPrincipal.nombre}
               </h2>
@@ -106,6 +125,20 @@ export const WorkshopPanel: React.FC = () => {
               <p className="text-[11px] text-white/60">
                 XP: {xpActual} / {xpReq}
               </p>
+            </div>
+          </div>
+
+          {/* Visual Mech Garage Banner */}
+          <div className="relative w-full h-36 mb-3 rounded-lg overflow-hidden border border-cyan-500/30 bg-black flex items-center justify-center">
+            <img
+              src={robotImg}
+              alt={robotPrincipal.nombre}
+              referrerPolicy="no-referrer"
+              className="h-full w-full object-cover object-center animate-float opacity-90"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-black/30 pointer-events-none" />
+            <div className="absolute bottom-2 left-2 text-[10px] font-mono text-cyan-400 bg-black/70 px-2 py-0.5 rounded border border-cyan-500/30">
+              SISTEMAS OPERATIVOS EN LÍNEA
             </div>
           </div>
 
@@ -167,6 +200,17 @@ export const WorkshopPanel: React.FC = () => {
           {renderModuleCard('Brazo Izq', robotPrincipal.brazoIzquierdo)}
           {renderModuleCard('Brazo Der', robotPrincipal.brazoDerecho)}
           {renderModuleCard('Piernas', robotPrincipal.piernas)}
+        </div>
+
+        {/* Viral Share Build Button */}
+        <div className="mt-4 pt-3 border-t border-white/10">
+          <button
+            onClick={() => setShareModalOpen(true)}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-cyan-500/20 border border-cyan-400/50 hover:bg-cyan-500/30 text-cyan-300 py-2.5 font-orbitron text-xs font-bold uppercase tracking-wider transition cursor-pointer"
+          >
+            <Share2 className="h-4 w-4" />
+            <span>GENERAR FICHA DE COMBATE</span>
+          </button>
         </div>
       </div>
 
@@ -230,6 +274,16 @@ export const WorkshopPanel: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ShareBuildModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+      />
+
+      <EliteLicenseModal
+        isOpen={licenseModalOpen}
+        onClose={() => setLicenseModalOpen(false)}
+      />
     </div>
   );
 };

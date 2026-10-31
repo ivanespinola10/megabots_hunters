@@ -5,7 +5,6 @@ import {
   TipoModulo,
   TipoElemento,
   HabilidadActiva,
-  TipoPasiva,
   ItemData,
   BattleEvent,
   getModulos,
@@ -18,7 +17,8 @@ import {
 import { audioService } from '../services/audioService';
 
 export function useBattleEngine(
-  onAnimationEvent?: (event: BattleEvent) => void
+  onAnimationEvent?: (event: BattleEvent) => void,
+  onHapticEvent?: (type: 'light' | 'medium' | 'heavy' | 'success') => void
 ) {
   const [jugador, setJugador] = useState<RobotData | null>(null);
   const [enemigo, setEnemigo] = useState<RobotData | null>(null);
@@ -29,12 +29,16 @@ export function useBattleEngine(
   const [creditosGenerados, setCreditosGenerados] = useState<number>(0);
   const [xpGenerada, setXpGenerada] = useState<number>(0);
   const [logCombate, setLogCombate] = useState<string[]>([]);
+  const [arenaWave, setArenaWave] = useState<number>(1);
+  const [isArenaMode, setIsArenaMode] = useState<boolean>(false);
 
   // Status effects
   const turnosQuemadoJugador = useRef<number>(0);
   const turnosQuemadoEnemigo = useRef<number>(0);
   const turnosHieloJugador = useRef<number>(0);
   const turnosHieloEnemigo = useRef<number>(0);
+  const currentWaveRef = useRef<number>(1);
+  const poolEnemigosRef = useRef<RobotData[]>([]);
 
   const agregarLog = useCallback((mensaje: string) => {
     setLogCombate((prev) => [mensaje, ...prev.slice(0, 19)]);
@@ -70,8 +74,10 @@ export function useBattleEngine(
   const initCombate = useCallback((
     pJugador: RobotData,
     enemigoId: string,
-    enemigosDisponibles: RobotData[]
+    enemigosDisponibles: RobotData[],
+    esArena: boolean = false
   ) => {
+    poolEnemigosRef.current = enemigosDisponibles;
     const baseEnemy = enemigosDisponibles.find((e) => e.id === enemigoId) || enemigosDisponibles[0];
     const cloneEnemigo = cloneRobot(baseEnemy);
     const cloneJugador = cloneRobot(pJugador);
@@ -84,6 +90,9 @@ export function useBattleEngine(
     setLootGenerado([]);
     setCreditosGenerados(0);
     setXpGenerada(0);
+    setIsArenaMode(esArena);
+    setArenaWave(1);
+    currentWaveRef.current = 1;
 
     turnosQuemadoJugador.current = 0;
     turnosQuemadoEnemigo.current = 0;
@@ -91,12 +100,12 @@ export function useBattleEngine(
     turnosHieloEnemigo.current = 0;
 
     setLogCombate([
-      'Sistema de Combate Inicializado',
+      esArena ? 'ARENA INFINITA: Oleada 1 Inicializada' : 'Sistema de Combate Inicializado',
       `Enemigo Detectado: ${cloneEnemigo.nombre}`,
     ]);
   }, []);
 
-  const calcularLootYRecompensas = useCallback((finalEnemigo: RobotData) => {
+  const calcularLootYRecompensas = useCallback((finalEnemigo: RobotData, wavesCleared: number = 1) => {
     const loot: ItemData[] = [];
     const modulosEnemigo = getModulos(finalEnemigo);
 
@@ -121,8 +130,8 @@ export function useBattleEngine(
       agregarLog('> Sin piezas recuperables.');
     }
 
-    const creds = 50 + Math.floor(Math.random() * 101);
-    const xp = (finalEnemigo.nivel || 1) * 30 + Math.floor(Math.random() * 20);
+    const creds = (50 + Math.floor(Math.random() * 101)) * wavesCleared;
+    const xp = ((finalEnemigo.nivel || 1) * 30 + Math.floor(Math.random() * 20)) * wavesCleared;
 
     agregarLog(`>>> OBTIENES ${creds} CHTR <<<`);
     agregarLog(`>>> OBTIENES ${xp} XP <<<`);
@@ -131,13 +140,46 @@ export function useBattleEngine(
     setCreditosGenerados(creds);
     setXpGenerada(xp);
     audioService.playSfx('victory');
+    onHapticEvent?.('success');
+  }, [agregarLog, onHapticEvent]);
+
+  const siguienteOleadaArena = useCallback((currentJugador: RobotData) => {
+    const nextWave = currentWaveRef.current + 1;
+    currentWaveRef.current = nextWave;
+    setArenaWave(nextWave);
+
+    // Minor repair to player
+    const hPrev = currentJugador.cabeza.hpActual ?? currentJugador.cabeza.hpMaximo;
+    const hMax = currentJugador.cabeza.hpMaximo;
+    const hNext = Math.min(hMax, hPrev + 25);
+    const updatedJugador = {
+      ...currentJugador,
+      cabeza: { ...currentJugador.cabeza, hpActual: hNext },
+    };
+    setJugador(updatedJugador);
+
+    // Pick random enemy scaled to wave
+    const enemies = poolEnemigosRef.current;
+    const base = enemies[Math.floor(Math.random() * enemies.length)] || enemies[0];
+    const newEnemy = cloneRobot(base);
+    newEnemy.nivel = (newEnemy.nivel || 1) + nextWave - 1;
+    newEnemy.baseAtaque = (newEnemy.baseAtaque || 10) + nextWave * 2;
+    newEnemy.cabeza.hpMaximo += nextWave * 15;
+    newEnemy.cabeza.hpActual = newEnemy.cabeza.hpMaximo;
+    setEnemigo(newEnemy);
+
+    turnosQuemadoEnemigo.current = 0;
+    turnosHieloEnemigo.current = 0;
+
+    agregarLog(`>>> ¡OLEADA ${nextWave} DESPLEGADA: ${newEnemy.nombre} (Nv. ${newEnemy.nivel})! <<<`);
+    audioService.playSfx('heal');
+    setIsPlayerTurn(true);
   }, [agregarLog]);
 
   const finalizarTurnoJugador = useCallback((curJugador: RobotData, curEnemigo: RobotData) => {
     setIsPlayerTurn(false);
 
     setTimeout(() => {
-      // Procesar estados del enemigo al inicio de su turno
       let updatedEnemigo = { ...curEnemigo };
       if (turnosQuemadoEnemigo.current > 0) {
         const dmg = 5;
@@ -153,6 +195,10 @@ export function useBattleEngine(
         onAnimationEvent?.({ monto: dmg, esCura: false, objetivoEsJugador: false, moduloAfectado: 'cabeza' });
 
         if (isDerrotado(updatedEnemigo)) {
+          if (isArenaMode) {
+            siguienteOleadaArena(curJugador);
+            return;
+          }
           setEnemigo(updatedEnemigo);
           setBattleEnded(true);
           setResultadoFinal('VICTORIA');
@@ -165,10 +211,9 @@ export function useBattleEngine(
         turnosHieloEnemigo.current -= 1;
       }
 
-      // Turno enemigo IA
       ejecutarTurnoEnemigo(curJugador, updatedEnemigo);
-    }, 900);
-  }, [agregarLog, onAnimationEvent, calcularLootYRecompensas]);
+    }, 850);
+  }, [agregarLog, onAnimationEvent, calcularLootYRecompensas, isArenaMode, siguienteOleadaArena]);
 
   const ejecutarTurnoEnemigo = useCallback((currentJugador: RobotData, currentEnemigo: RobotData) => {
     const disponibles = getModulos(currentJugador).filter((m) => m.estado !== 'destruido');
@@ -188,7 +233,7 @@ export function useBattleEngine(
     let velDefensor = getVelocidadTotal(currentJugador);
     if (turnosHieloJugador.current > 0) velDefensor = Math.floor(velDefensor * 0.5);
 
-    // Evasión
+    // Evasion
     if (verificarEvasion(velAtacante, velDefensor)) {
       agregarLog('> ¡ESQUIVASTE el ataque del enemigo!');
       finalizarTurnoEnemigo(currentJugador, currentEnemigo);
@@ -203,6 +248,7 @@ export function useBattleEngine(
       dmg *= 2;
       agregarLog('>>> ¡CRÍTICO ENEMIGO! <<<');
       audioService.playSfx('crit');
+      onHapticEvent?.('heavy');
     }
 
     if (pasivas.includes('aturdir') && Math.random() < 0.15) {
@@ -210,7 +256,6 @@ export function useBattleEngine(
       agregarLog('>>> ¡SISTEMAS PARALIZADOS! <<<');
     }
 
-    // Efecto elemental
     if (el === 'corrosivo' && target.tipo !== 'cabeza') {
       dmg = Math.floor(dmg * 1.5);
     }
@@ -243,6 +288,7 @@ export function useBattleEngine(
       moduloAfectado: target.tipo,
     });
     audioService.playSfx('hit');
+    onHapticEvent?.('medium');
     agregarLog(`> Enemigo hace ${vidaPerdida} daño a ${targetMod.nombre}.`);
 
     if (pasivas.includes('roboDeVida') && vidaPerdida > 0) {
@@ -258,6 +304,7 @@ export function useBattleEngine(
 
     if (updatedTargetMod.estado === 'destruido') {
       agregarLog(`>> ¡Tu ${updatedTargetMod.nombre} ha sido DESTRUIDO!`);
+      onHapticEvent?.('heavy');
     }
 
     setJugador(nextJugador);
@@ -265,9 +312,13 @@ export function useBattleEngine(
 
     if (isDerrotado(nextJugador)) {
       setBattleEnded(true);
-      setResultadoFinal('DERROTA');
+      setResultadoFinal(isArenaMode ? `ARENA SUPERADA: ${currentWaveRef.current} OLEADAS` : 'DERROTA');
       agregarLog('>>> SISTEMA CAÍDO. HAS SIDO DERROTADO <<<');
       audioService.playSfx('defeat');
+      onHapticEvent?.('heavy');
+      if (isArenaMode) {
+        calcularLootYRecompensas(currentEnemigo, currentWaveRef.current);
+      }
       return;
     }
 
@@ -275,16 +326,15 @@ export function useBattleEngine(
       agregarLog('> ¡El enemigo vuelve a atacar!');
       setTimeout(() => {
         ejecutarTurnoEnemigo(nextJugador, currentEnemigo);
-      }, 1000);
+      }, 950);
     } else {
       finalizarTurnoEnemigo(nextJugador, currentEnemigo);
     }
-  }, [agregarLog, onAnimationEvent]);
+  }, [agregarLog, onAnimationEvent, onHapticEvent, isArenaMode, calcularLootYRecompensas]);
 
   const finalizarTurnoEnemigo = useCallback((currentJugador: RobotData, currentEnemigo: RobotData) => {
     setIsPlayerTurn(true);
 
-    // Inicio de turno jugador: regenerar 10 energía y procesar quemadura / hielo
     let nextJugador = { ...currentJugador };
     const maxEnergia = nextJugador.energiaMax ?? 100;
     const curEnergia = nextJugador.energiaActual ?? 100;
@@ -308,7 +358,7 @@ export function useBattleEngine(
       if (isDerrotado(nextJugador)) {
         setJugador(nextJugador);
         setBattleEnded(true);
-        setResultadoFinal('DERROTA');
+        setResultadoFinal(isArenaMode ? `ARENA: ${currentWaveRef.current} OLEADAS` : 'DERROTA');
         agregarLog('>>> SISTEMA CAÍDO. HAS SIDO DERROTADO <<<');
         audioService.playSfx('defeat');
         return;
@@ -321,7 +371,7 @@ export function useBattleEngine(
 
     setJugador(nextJugador);
     setEnemigo(currentEnemigo);
-  }, [agregarLog, onAnimationEvent]);
+  }, [agregarLog, onAnimationEvent, isArenaMode]);
 
   // Player Basic Attack
   const ataqueJugador = useCallback((objetivo: TipoModulo) => {
@@ -333,7 +383,6 @@ export function useBattleEngine(
     let velDefensor = getVelocidadTotal(enemigo);
     if (turnosHieloEnemigo.current > 0) velDefensor = Math.floor(velDefensor * 0.5);
 
-    // Evasión
     if (verificarEvasion(velAtacante, velDefensor)) {
       agregarLog('> ¡El enemigo ESQUIVÓ tu ataque!');
       finalizarTurnoJugador(jugador, enemigo);
@@ -348,6 +397,7 @@ export function useBattleEngine(
       dmg *= 2;
       agregarLog('>>> ¡TU CRÍTICO! <<<');
       audioService.playSfx('crit');
+      onHapticEvent?.('heavy');
     }
 
     if (pasivas.includes('aturdir') && Math.random() < 0.15) {
@@ -379,6 +429,7 @@ export function useBattleEngine(
         moduloAfectado: objetivo,
       });
       audioService.playSfx('hit');
+      onHapticEvent?.('medium');
       agregarLog(`> Haces ${vidaPerdida} daño a ${targetMod.nombre}.`);
 
       let nextJugador = { ...jugador };
@@ -402,6 +453,10 @@ export function useBattleEngine(
       setEnemigo(nextEnemigo);
 
       if (isDerrotado(nextEnemigo)) {
+        if (isArenaMode) {
+          siguienteOleadaArena(nextJugador);
+          return;
+        }
         setBattleEnded(true);
         setResultadoFinal('VICTORIA');
         agregarLog('>>> ENEMIGO DERROTADO <<<');
@@ -420,7 +475,7 @@ export function useBattleEngine(
     }
 
     finalizarTurnoJugador(jugador, enemigo);
-  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, finalizarTurnoJugador, calcularLootYRecompensas]);
+  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, onHapticEvent, finalizarTurnoJugador, calcularLootYRecompensas, isArenaMode, siguienteOleadaArena]);
 
   // Player Active Skill
   const usarHabilidadJugador = useCallback((
@@ -447,6 +502,7 @@ export function useBattleEngine(
       nextJugador.cabeza = { ...nextJugador.cabeza, hpActual: hNext };
       onAnimationEvent?.({ monto: 30, esCura: true, objetivoEsJugador: true, moduloAfectado: 'cabeza' });
       audioService.playSfx('heal');
+      onHapticEvent?.('light');
       setJugador(nextJugador);
       finalizarTurnoJugador(nextJugador, enemigo);
       return;
@@ -466,18 +522,19 @@ export function useBattleEngine(
 
       onAnimationEvent?.({ monto: 15, esCura: true, objetivoEsJugador: true, moduloAfectado: 'cabeza' });
       audioService.playSfx('heal');
+      onHapticEvent?.('light');
       setJugador(nextJugador);
       finalizarTurnoJugador(nextJugador, enemigo);
       return;
     }
 
-    // Ataque ofensivo
     let multDmg = 1.0;
     let esquivable = true;
     if (hab === 'canonLaser') {
       multDmg = 2.0;
       agregarLog('> ¡USANDO CAÑÓN LÁSER!');
       audioService.playSfx('crit');
+      onHapticEvent?.('heavy');
     } else if (hab === 'ataqueRapido') {
       multDmg = 0.8;
       esquivable = false;
@@ -511,7 +568,6 @@ export function useBattleEngine(
       agregarLog('>>> ¡ENEMIGO ATURDIDO! <<<');
     }
 
-    // Elemento del módulo origen
     const elemento = modOrigen.elemento || 'neutro';
     if (elemento === 'corrosivo' && objetivo !== 'cabeza') {
       dmg = Math.floor(dmg * 1.5);
@@ -567,6 +623,10 @@ export function useBattleEngine(
     setEnemigo(nextEnemigo);
 
     if (isDerrotado(nextEnemigo)) {
+      if (isArenaMode) {
+        siguienteOleadaArena(nextJugador);
+        return;
+      }
       setBattleEnded(true);
       setResultadoFinal('VICTORIA');
       agregarLog('>>> ENEMIGO DERROTADO <<<');
@@ -581,7 +641,7 @@ export function useBattleEngine(
     }
 
     finalizarTurnoJugador(nextJugador, nextEnemigo);
-  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, finalizarTurnoJugador, calcularLootYRecompensas]);
+  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, onHapticEvent, finalizarTurnoJugador, calcularLootYRecompensas, isArenaMode, siguienteOleadaArena]);
 
   // Support Bit action
   const usarBitSoporte = useCallback(() => {
@@ -621,6 +681,7 @@ export function useBattleEngine(
           moduloAfectado: moduloHerido.tipo,
         });
         audioService.playSfx('heal');
+        onHapticEvent?.('light');
       }
       agregarLog(`> BIT SOPORTE: Repara ${vidaGanada} HP de ${moduloHerido.nombre}.`);
     } else {
@@ -646,6 +707,7 @@ export function useBattleEngine(
           moduloAfectado: mRandom.tipo,
         });
         audioService.playSfx('hit');
+        onHapticEvent?.('light');
         agregarLog(`> BIT SOPORTE: Sabotea a enemigo. ${vidaPerdida} daño a ${mRandom.nombre}.`);
 
         if (updatedM.estado === 'destruido') {
@@ -660,6 +722,10 @@ export function useBattleEngine(
     setEnemigo(nextEnemigo);
 
     if (isDerrotado(nextEnemigo)) {
+      if (isArenaMode) {
+        siguienteOleadaArena(nextJugador);
+        return;
+      }
       setBattleEnded(true);
       setResultadoFinal('VICTORIA');
       agregarLog('>>> ENEMIGO DERROTADO <<<');
@@ -668,7 +734,7 @@ export function useBattleEngine(
     }
 
     finalizarTurnoJugador(nextJugador, nextEnemigo);
-  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, finalizarTurnoJugador, calcularLootYRecompensas]);
+  }, [battleEnded, isPlayerTurn, jugador, enemigo, agregarLog, onAnimationEvent, onHapticEvent, finalizarTurnoJugador, calcularLootYRecompensas, isArenaMode, siguienteOleadaArena]);
 
   return {
     jugador,
@@ -680,6 +746,8 @@ export function useBattleEngine(
     creditosGenerados,
     xpGenerada,
     logCombate,
+    arenaWave,
+    isArenaMode,
     initCombate,
     ataqueJugador,
     usarHabilidadJugador,
